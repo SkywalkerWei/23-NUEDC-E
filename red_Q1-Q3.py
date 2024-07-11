@@ -58,7 +58,17 @@ def calculate_average_rgb(region):
     b_avg = b_total // num_pixels
     return r_avg, g_avg, b_avg
 
-threshold = [(85, 100, -128, 127, -128, 127)] # 阈值
+threshold = [(85, 100, -128, 127, -128, 127)] # 阈值 = (minL, maxL, minA, maxA, minB, maxB) LAB格式
+
+# blob.rect() 色块外框矩形(x, y, w, h)，可以直接在image.draw_rectangle中使用。
+# blob.x() 外框x（int），blob[0]
+# blob.y() 外框y（int），blob[1]
+# blob.w() 外框宽度w（int），blob[2]
+# blob.h() 外框高度h（int），blob[3]
+# blob.pixels() 色块的像素数量（int），blob[4]
+# blob.cx() 外框中心x坐标（int），blob[5]
+# blob.cy() 外框中心y坐标（int），blob[6]
+
 x_roi = 51 #这四个看情况
 y_roi = 8
 w = 221
@@ -185,7 +195,7 @@ while(True):
     if subscriber_mode ==1:
         roi_blob = []
         blob = img.find_blobs(threshold, margin=10,)
-        img.draw_rectangle(x_roi, y_roi, w, h, color = (0,0,255), thickness = 2, fill = False)
+        img.draw_rectangle(x_roi, y_roi, w, h, color = (0,0,255), thickness = 2, fill = False) # 这里是画了一个矩形
         if blob:
             for i in blob:
                 if i[5]<(x_roi+w) and i[5] >x_roi and i[6]<(y_roi + h) and i[6]>y_roi:
