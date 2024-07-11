@@ -8,7 +8,8 @@ sensor.reset()
 sensor.set_pixformat(sensor.RGB565)
 sensor.set_framesize(sensor.QVGA)
 sensor.skip_frames(time = 2000)
-sensor.set_auto_whitebal(False)
+# sensor.set_auto_gain(False) # 颜色跟踪必须关闭自动增益？
+sensor.set_auto_whitebal(False) # 颜色跟踪必须关闭白平衡
 sensor.set_brightness(-3)
 
 # sensor.set_auto_exposure(False,500)
@@ -194,7 +195,7 @@ while(True):
 
     if subscriber_mode ==1:
         roi_blob = []
-        blob = img.find_blobs(threshold, margin=10,)
+        blob = img.find_blobs(threshold, margin=10,) # 直接修改例程的颜色追踪
         img.draw_rectangle(x_roi, y_roi, w, h, color = (0,0,255), thickness = 2, fill = False) # 这里是画了一个矩形
         if blob:
             for i in blob:
@@ -264,7 +265,7 @@ while(True):
             sensor.set_pixformat(sensor.GRAYSCALE)
             # img.morph(kernel_size, kernel)
             img.binary(black_threshold_GRAY)
-            ACCCC = img.find_rects(roi = (x_roi,y_roi,w,h), threshold=10000)
+            ACCCC = img.find_rects(roi = (x_roi,y_roi,w,h), threshold=10000) # 此处直接在例程基础上修改
             print(len(ACCCC))
             for r in ACCCC:
                 # 判断是否围成矩形
