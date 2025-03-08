@@ -1,0 +1,213 @@
+C251 COMPILER V5.60.0,  LobotServoController                                               04/08/23  00:40:10  PAGE 1   
+
+
+C251 COMPILER V5.60.0, COMPILATION OF MODULE LobotServoController
+OBJECT MODULE PLACED IN .\Out_File\LobotServoController.obj
+COMPILER INVOKED BY: E:\smart car\C251\BIN\C251.EXE ..\CODE\LobotServoController.c XSMALL INTR2 WARNINGLEVEL(3) BROWSE I
+                    -NCDIR(..\..\Libraries\libraries;..\..\Libraries\seekfree_libraries;..\..\Libraries\seekfree_peripheral;..\CODE;..\USER\i
+                    -nc;..\USER\src) DEBUG PRINT(.\Out_File\LobotServoController.lst) TABS(2) OBJECT(.\Out_File\LobotServoController.obj) 
+
+stmt  level    source
+
+    1          /*******************************************************************************
+    2          * 文件名： LobotServoController.c
+    3          * 作者： 深圳乐幻索尔科技
+    4          * 日期：20160806
+    5          * LSC系列舵机控制板二次开发示例
+    6          *******************************************************************************/
+    7          #include "headfile.h"
+    8          #include "LobotServoController.h"
+    9          
+   10          
+   11          #define GET_LOW_BYTE(A) ((uint8)(A))
+   12          //宏函数 获得A的低八位
+   13          #define GET_HIGH_BYTE(A) ((uint8)((A) >> 8))
+   14          //宏函数 获得A的高八位
+   15          
+   16          
+   17          
+   18          uint8 LobotTxBuf[128];  //发送缓存
+   19          uint8 LobotRxBuf[16];
+   20          uint16 batteryVolt;
+   21          
+   22          /*********************************************************************************
+   23           * Function:  moveServo
+   24           * Description： 控制单个舵机转动
+   25           * Parameters:   sevoID:舵机ID，Position:目标位置,Time:转动时间
+   26                              舵机ID取值:0<=舵机ID<=31,Time取值: Time > 0
+   27           * Return:       无返回
+   28           * Others:
+   29           **********************************************************************************/
+   30          void moveServo(uint8 servoID, uint16 Position, uint16 Time)
+   31          {
+   32   1        if (servoID > 31 || !(Time > 0)) {  //舵机ID不能打于31,可根据对应控制板修改
+   33   2          return;
+   34   2        }
+   35   1        LobotTxBuf[0] = LobotTxBuf[1] = FRAME_HEADER;    //填充帧头
+   36   1        LobotTxBuf[2] = 8;
+   37   1        LobotTxBuf[3] = CMD_SERVO_MOVE;           //数据长度=要控制舵机数*3+5，此处=1*3+5//填充�
+             -�机移动指令
+   38   1        LobotTxBuf[4] = 1;                        //要控制的舵机个数
+   39   1        LobotTxBuf[5] = GET_LOW_BYTE(Time);       //取得时间的低八位
+   40   1        LobotTxBuf[6] = GET_HIGH_BYTE(Time);      //取得时间的高八位
+   41   1        LobotTxBuf[7] = servoID;                  //舵机ID
+   42   1        LobotTxBuf[8] = GET_LOW_BYTE(Position);   //取得目标位置的低八位
+   43   1        LobotTxBuf[9] = GET_HIGH_BYTE(Position);  //取得目标位置的高八位
+   44   1      
+   45   1        uart_putbuff(DEBUG_UART,LobotTxBuf, 10);
+   46   1      }
+   47          
+   48          /*********************************************************************************
+   49           * Function:  moveServosByArray
+   50           * Description： 控制多个舵机转动
+   51           * Parameters:   servos[]:舵机结体数组，Num:舵机个数,Time:转动时间
+   52                              0 < Num <= 32,Time > 0
+   53           * Return:       无返回
+   54           * Others:
+   55           **********************************************************************************/
+   56          void moveServosByArray(LobotServo servos[], uint8 Num, uint16 Time)
+C251 COMPILER V5.60.0,  LobotServoController                                               04/08/23  00:40:10  PAGE 2   
+
+   57          {
+   58   1        uint8 index = 7;
+   59   1        uint8 i = 0;
+   60   1      
+   61   1        if (Num < 1 || Num > 32 || !(Time > 0)) {
+   62   2          return;                                          //舵机数不能为零和大与32，时间不能为�
+             -�
+   63   2        }
+   64   1        LobotTxBuf[0] = LobotTxBuf[1] = FRAME_HEADER;      //填充帧头
+   65   1        LobotTxBuf[2] = Num * 3 + 5;                       //数据长度 = 要控制舵机数*3+5
+   66   1        LobotTxBuf[3] = CMD_SERVO_MOVE;                    //填充舵机移动指令
+   67   1        LobotTxBuf[4] = Num;                               //要控制的舵机个数
+   68   1        LobotTxBuf[5] = GET_LOW_BYTE(Time);                //取得时间的低八位
+   69   1        LobotTxBuf[6] = GET_HIGH_BYTE(Time);               //取得时间的高八位
+   70   1      
+   71   1        for (i = 0; i < Num; i++) {                        //循环填充舵机ID和对应目标位置
+   72   2          LobotTxBuf[index++] = servos[i].ID;              //填充舵机ID
+   73   2          LobotTxBuf[index++] = GET_LOW_BYTE(servos[i].Position); //填充目标位置低八位
+   74   2          LobotTxBuf[index++] = GET_HIGH_BYTE(servos[i].Position);//填充目标位置高八位
+   75   2        }
+   76   1      
+   77   1        uart_putbuff(DEBUG_UART,LobotTxBuf, LobotTxBuf[2] + 2);             //发送
+   78   1      }
+   79          
+   80          
+   81          /*********************************************************************************
+   82           * Function:  runActionGroup
+   83           * Description： 运行指定动作组
+   84           * Parameters:   NumOfAction:动作组序号, Times:执行次数
+   85           * Return:       无返回
+   86           * Others:       Times = 0 时无限循环
+   87           **********************************************************************************/
+   88          void runActionGroup(uint8 numOfAction, uint16 Times)
+   89          {
+   90   1        LobotTxBuf[0] = LobotTxBuf[1] = FRAME_HEADER;  //填充帧头
+   91   1        LobotTxBuf[2] = 5;                      //数据长度，数据帧除帧头部分数据字节数，此�
+             -�令固定为5
+   92   1        LobotTxBuf[3] = CMD_ACTION_GROUP_RUN;   //填充运行动作组命令
+   93   1        LobotTxBuf[4] = numOfAction;            //填充要运行的动作组号
+   94   1        LobotTxBuf[5] = GET_LOW_BYTE(Times);    //取得要运行次数的低八位
+   95   1        LobotTxBuf[6] = GET_HIGH_BYTE(Times);   //取得要运行次数的高八位
+   96   1      
+   97   1        uart_putbuff(DEBUG_UART,LobotTxBuf, 7);            //发送
+   98   1      }
+   99          
+  100          /*********************************************************************************
+  101           * Function:  stopActiongGroup
+  102           * Description： 停止动作组运行
+  103           * Parameters:   Speed: 目标速度
+  104           * Return:       无返回
+  105           * Others:
+  106           **********************************************************************************/
+  107          void stopActionGroup(void)
+  108          {
+  109   1        LobotTxBuf[0] = FRAME_HEADER;     //填充帧头
+  110   1        LobotTxBuf[1] = FRAME_HEADER;
+  111   1        LobotTxBuf[2] = 2;                //数据长度，数据帧除帧头部分数据字节数，此命令�
+             -�定为2
+  112   1        LobotTxBuf[3] = CMD_ACTION_GROUP_STOP;   //填充停止运行动作组命令
+  113   1      
+  114   1        uart_putbuff(DEBUG_UART,LobotTxBuf, 4);      //发送
+  115   1      }
+  116          /*********************************************************************************
+  117           * Function:  setActionGroupSpeed
+  118           * Description： 设定指定动作组的运行速度
+  119           * Parameters:   NumOfAction: 动作组序号 , Speed:目标速度
+C251 COMPILER V5.60.0,  LobotServoController                                               04/08/23  00:40:10  PAGE 3   
+
+  120           * Return:       无返回
+  121           * Others:
+  122           **********************************************************************************/
+  123          void setActionGroupSpeed(uint8 numOfAction, uint16 Speed)
+  124          {
+  125   1        LobotTxBuf[0] = LobotTxBuf[1] = FRAME_HEADER;   //填充帧头
+  126   1        LobotTxBuf[2] = 5;                       //数据长度，数据帧除帧头部分数据字节数，此�
+             -��令固定为5
+  127   1        LobotTxBuf[3] = CMD_ACTION_GROUP_SPEED;  //填充设置动作组速度命令
+  128   1        LobotTxBuf[4] = numOfAction;             //填充要设置的动作组号
+  129   1        LobotTxBuf[5] = GET_LOW_BYTE(Speed);     //获得目标速度的低八位
+  130   1        LobotTxBuf[6] = GET_HIGH_BYTE(Speed);    //获得目标熟读的高八位
+  131   1      
+  132   1        uart_putbuff(DEBUG_UART,LobotTxBuf, 7);             //发送
+  133   1      }
+  134          
+  135          /*********************************************************************************
+  136           * Function:  setAllActionGroupSpeed
+  137           * Description： 设置所有动作组的运行速度
+  138           * Parameters:   Speed: 目标速度
+  139           * Return:       无返回
+  140           * Others:
+  141           **********************************************************************************/
+  142          void setAllActionGroupSpeed(uint16 Speed)
+  143          {
+  144   1        setActionGroupSpeed(0xFF, Speed);  //调用动作组速度设定，组号为0xFF时设置所有组的速
+             -度
+  145   1      }
+  146          
+  147          /*********************************************************************************
+  148           * Function:  getBatteryVoltage
+  149           * Description： 发送获取电池电压命令
+  150           * Parameters:   Timeout：重试次数
+  151           * Return:       无返回
+  152           * Others:
+  153           **********************************************************************************/
+  154          void getBatteryVoltage(void)
+  155          {
+  156   1      //  uint16_t Voltage = 0;
+  157   1        LobotTxBuf[0] = FRAME_HEADER;  //填充帧头
+  158   1        LobotTxBuf[1] = FRAME_HEADER;
+  159   1        LobotTxBuf[2] = 2;             //数据长度，数据帧除帧头部分数据字节数，此命令固�
+             -�为2
+  160   1        LobotTxBuf[3] = CMD_GET_BATTERY_VOLTAGE;  //填充获取电池电压命令
+  161   1      
+  162   1        uart_putbuff(DEBUG_UART,LobotTxBuf, 4);   //发送
+  163   1      }
+  164          
+  165          
+
+
+Module Information          Static   Overlayable
+------------------------------------------------
+  code size            =       410     ------
+  ecode size           =    ------     ------
+  data size            =    ------     ------
+  idata size           =    ------     ------
+  pdata size           =    ------     ------
+  xdata size           =    ------     ------
+  xdata-const size     =    ------     ------
+  edata size           =       146     ------
+  bit size             =    ------     ------
+  ebit size            =    ------     ------
+  bitaddressable size  =    ------     ------
+  ebitaddressable size =    ------     ------
+  far data size        =    ------     ------
+  huge data size       =    ------     ------
+C251 COMPILER V5.60.0,  LobotServoController                                               04/08/23  00:40:10  PAGE 4   
+
+  const size           =    ------     ------
+  hconst size          =    ------     ------
+End of Module Information.
+
+
+C251 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)
